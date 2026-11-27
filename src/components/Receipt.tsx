@@ -6,13 +6,15 @@ import { formatBreak } from "@/lib/receipt";
 const TEETH =
   "M0 0 L5 10 L10 0 L15 10 L20 0 L25 10 L30 0 L35 10 L40 0 L45 10 L50 0 L55 10 L60 0 L65 10 L70 0 L75 10 L80 0 L85 10 L90 0 L95 10 L100 0 L105 10 L110 0 L115 10 L120 0 L125 10 L130 0 L135 10 L140 0 L145 10 L150 0 L155 10 L160 0 L165 10 L170 0 L175 10 L180 0 L185 10 L190 0 L195 10 L200 0 L205 10 L210 0 L215 10 L220 0 L225 10 L230 0 L235 10 L240 0 L245 10 L250 0 L255 10 L260 0 L265 10 L270 0 L275 10 L280 0 L285 10 L290 0 L295 10 L300 0 L305 10 L310 0 L315 10 L320 0 L325 10 L330 0 L335 10 L340 0 L345 10 L350 0 L355 10 L360 0 L365 10 L370 0 L375 10 L380 0 L385 10 L390 0 L395 10 L400 0 L400 10 L0 10 Z";
 
-function Zigzag({ flipped }: { flipped?: boolean }) {
+function Zigzag({ flipped, shadow }: { flipped?: boolean; shadow?: boolean }) {
   return (
     <svg
       viewBox="0 0 400 10"
       preserveAspectRatio="none"
       aria-hidden="true"
-      className={`block h-[10px] w-full text-white ${flipped ? "-scale-y-100" : ""}`}
+      className={`block h-[10px] w-full text-white ${flipped ? "-scale-y-100" : ""} ${
+        shadow ? "drop-shadow-[0_4px_4px_rgba(15,23,42,0.10)]" : ""
+      }`}
     >
       <path d={TEETH} fill="currentColor" />
     </svg>
@@ -181,7 +183,7 @@ export function Receipt({ input, result }: { input: PayInput; result: PayResult 
         </div>
       </div>
 
-      <Zigzag />
+      <Zigzag shadow />
     </section>
   );
 }
