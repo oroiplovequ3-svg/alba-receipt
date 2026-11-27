@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "verify": "node --experimental-strip-types --test tests/pay.test.ts"
+    "verify": "node --experimental-strip-types --test tests/pay.test.ts tests/calendar.test.ts"
   },
   "dependencies": {
     "next": "15.5.29",

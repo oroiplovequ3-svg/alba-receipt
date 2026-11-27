@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarPanel } from "@/components/CalendarPanel";
 import { Receipt } from "@/components/Receipt";
 import { RealPayCheck } from "@/components/RealPayCheck";
 import { Faq } from "@/components/Faq";
@@ -16,10 +17,22 @@ import {
   type PayInput,
   type TaxType,
 } from "@/lib/pay";
-import { buildReceiptText } from "@/lib/receipt";
+import {
+  calcCalendarPay,
+  calendarInputOf,
+  defaultCalendarState,
+  hoursText,
+  sanitizeCalendarState,
+  type CalendarState,
+} from "@/lib/calendar";
+import { buildReceiptText, calendarSummary, simpleSummary } from "@/lib/summary";
 import { copyText } from "@/lib/clipboard";
 
 const STORAGE_KEY = "alba-receipt:input:v1";
+const STORAGE_KEY_CALENDAR = "alba-receipt:calendar:v1";
+const STORAGE_KEY_MODE = "alba-receipt:mode:v1";
+
+type CalcMode = "calendar" | "simple";
 
 const DEFAULT_INPUT: PayInput = {
   hourlyWage: MIN_WAGE_2026,
@@ -70,18 +83,39 @@ function sanitize(raw: unknown): PayInput {
 }
 
 export default function AlbaReceiptPage() {
+  const [mode, setMode] = useState<CalcMode>("calendar");
   const [input, setInput] = useState<PayInput>(DEFAULT_INPUT);
+  const [cal, setCal] = useState<CalendarState>(() => defaultCalendarState());
   const [actualPayText, setActualPayText] = useState("");
   const [copied, setCopied] = useState(false);
   const loadedRef = useRef(false);
 
   const result = useMemo(() => calcPay(input), [input]);
+  const calInput = useMemo(() => calendarInputOf(cal), [cal]);
+  const calendarResult = useMemo(
+    () =>
+      calcCalendarPay(calInput, {
+        hourlyWage: input.hourlyWage,
+        probation: input.probation,
+        fiveOrMoreEmployees: input.fiveOrMoreEmployees,
+        taxType: input.taxType,
+      }),
+    [calInput, input.hourlyWage, input.probation, input.fiveOrMoreEmployees, input.taxType],
+  );
+  const summary =
+    mode === "calendar"
+      ? calendarSummary(calInput, calendarResult)
+      : simpleSummary(input, result);
   const actualPay = Number(actualPayText.replace(/[^0-9]/g, ""));
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) setInput(sanitize(JSON.parse(raw)));
+      const rawCalendar = window.localStorage.getItem(STORAGE_KEY_CALENDAR);
+      if (rawCalendar) setCal(sanitizeCalendarState(JSON.parse(rawCalendar)));
+      const rawMode = window.localStorage.getItem(STORAGE_KEY_MODE);
+      if (rawMode === "simple" || rawMode === "calendar") setMode(rawMode);
     } catch {
       // 저장된 값이 없거나 깨졌으면 기본값을 쓴다
     }
@@ -98,6 +132,24 @@ export default function AlbaReceiptPage() {
   }, [input]);
 
   useEffect(() => {
+    if (!loadedRef.current) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY_CALENDAR, JSON.stringify(cal));
+    } catch {
+      // 저장 실패는 무시한다
+    }
+  }, [cal]);
+
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY_MODE, mode);
+    } catch {
+      // 저장 실패는 무시한다
+    }
+  }, [mode]);
+
+  useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 2200);
     return () => clearTimeout(timer);
@@ -108,7 +160,7 @@ export default function AlbaReceiptPage() {
 
   const handleCopyReceipt = async () => {
     const ok = await copyText(
-      buildReceiptText(input, result, actualPayText.trim() !== "" && actualPay > 0 ? actualPay : null),
+      buildReceiptText(summary, actualPayText.trim() !== "" && actualPay > 0 ? actualPay : null),
     );
     if (ok) setCopied(true);
   };
@@ -131,13 +183,41 @@ export default function AlbaReceiptPage() {
           <span aria-hidden="true">🧾</span> 알바영수증
         </h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-muted">
-          시급과 근무시간만 넣으면 주휴수당·4대보험까지 반영한
+          실제 달력에 근무일을 찍으면 주휴수당까지
           <br />
-          이번 달 예상 실수령액이 영수증으로 나와요.
+          이번 달 예상 실수령액을 영수증으로 계산해요.
         </p>
       </header>
 
-      <div className="mt-6 space-y-4">
+      {/* 계산 모드 */}
+      <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        {(
+          [
+            { id: "calendar" as CalcMode, title: "실제 달력 계산", sub: "날짜·요일별 정확" },
+            { id: "simple" as CalcMode, title: "간편 평균 계산", sub: "4.345주 추정" },
+          ] as const
+        ).map((tab) => {
+          const active = mode === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMode(tab.id)}
+              aria-pressed={active}
+              className={`rounded-xl px-2 py-2 text-center transition ${
+                active ? "bg-brand text-white shadow-sm" : "text-ink-muted hover:bg-slate-50"
+              }`}
+            >
+              <span className="block text-[12px] font-extrabold leading-tight">{tab.title}</span>
+              <span className={`block text-[9px] ${active ? "text-white/80" : "text-ink-faint"}`}>
+                {tab.sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-4">
         {/* 입력 카드 */}
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
           <div className="flex items-center justify-between">
@@ -146,6 +226,7 @@ export default function AlbaReceiptPage() {
               type="button"
               onClick={() => {
                 setInput(DEFAULT_INPUT);
+                setCal(defaultCalendarState());
                 setActualPayText("");
               }}
               className="text-[11px] font-semibold text-ink-faint underline decoration-slate-300 underline-offset-2 transition hover:text-ink-2"
@@ -201,74 +282,76 @@ export default function AlbaReceiptPage() {
             ) : null}
           </div>
 
-          {/* 근무시간 */}
-          <div className="mt-5">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-sm font-bold text-ink-2">근무 시간</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (input.useDirectHours) {
-                    update("useDirectHours", false);
-                    return;
-                  }
-                  setInput((prev) => ({
-                    ...prev,
-                    useDirectHours: true,
-                    directWeeklyHours: calcWeeklyHours(prev),
-                  }));
-                }}
-                className="text-[11px] font-semibold text-brand underline decoration-brand/30 underline-offset-2"
-              >
-                {input.useDirectHours ? "일수 × 시간으로 입력" : "주당 총 시간 직접입력"}
-              </button>
+          {/* 간편 모드 근무시간 */}
+          {mode === "simple" ? (
+            <div className="mt-5">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-sm font-bold text-ink-2">근무 시간</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (input.useDirectHours) {
+                      update("useDirectHours", false);
+                      return;
+                    }
+                    setInput((prev) => ({
+                      ...prev,
+                      useDirectHours: true,
+                      directWeeklyHours: calcWeeklyHours(prev),
+                    }));
+                  }}
+                  className="text-[11px] font-semibold text-brand underline decoration-brand/30 underline-offset-2"
+                >
+                  {input.useDirectHours ? "일수 × 시간으로 입력" : "주당 총 시간 직접입력"}
+                </button>
+              </div>
+
+              {input.useDirectHours ? (
+                <div>
+                  <NumericInput
+                    value={input.directWeeklyHours}
+                    onChange={(next) => update("directWeeklyHours", next)}
+                    suffix="시간/주"
+                    ariaLabel="주당 총 근무시간"
+                    placeholder="예: 18"
+                    max={168}
+                    step={0.5}
+                  />
+                  <p className="mt-1.5 text-[10px] text-ink-faint">
+                    휴게시간을 뺀 실제 근무시간을 넣어 주세요.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Stepper
+                    label="주 근무일수"
+                    valueLabel={`${input.weeklyDays}일`}
+                    ariaLabel="주 근무일수"
+                    onDecrease={() => update("weeklyDays", Math.max(1, input.weeklyDays - 1))}
+                    onIncrease={() => update("weeklyDays", Math.min(7, input.weeklyDays + 1))}
+                    disableDecrease={input.weeklyDays <= 1}
+                    disableIncrease={input.weeklyDays >= 7}
+                  />
+                  <Stepper
+                    label="하루 근무시간"
+                    valueLabel={`${input.dailyHours}시간`}
+                    ariaLabel="하루 근무시간"
+                    onDecrease={() =>
+                      update("dailyHours", Math.max(0.5, Math.round((input.dailyHours - 0.5) * 2) / 2))
+                    }
+                    onIncrease={() =>
+                      update("dailyHours", Math.min(24, Math.round((input.dailyHours + 0.5) * 2) / 2))
+                    }
+                    disableDecrease={input.dailyHours <= 0.5}
+                    disableIncrease={input.dailyHours >= 24}
+                  />
+                </div>
+              )}
             </div>
+          ) : null}
 
-            {input.useDirectHours ? (
-              <div>
-                <NumericInput
-                  value={input.directWeeklyHours}
-                  onChange={(next) => update("directWeeklyHours", next)}
-                  suffix="시간/주"
-                  ariaLabel="주당 총 근무시간"
-                  placeholder="예: 18"
-                  max={168}
-                  step={0.5}
-                />
-                <p className="mt-1.5 text-[10px] text-ink-faint">
-                  휴게시간을 뺀 실제 근무시간을 넣어 주세요.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <Stepper
-                  label="주 근무일수"
-                  valueLabel={`${input.weeklyDays}일`}
-                  ariaLabel="주 근무일수"
-                  onDecrease={() => update("weeklyDays", Math.max(1, input.weeklyDays - 1))}
-                  onIncrease={() => update("weeklyDays", Math.min(7, input.weeklyDays + 1))}
-                  disableDecrease={input.weeklyDays <= 1}
-                  disableIncrease={input.weeklyDays >= 7}
-                />
-                <Stepper
-                  label="하루 근무시간"
-                  valueLabel={`${input.dailyHours}시간`}
-                  ariaLabel="하루 근무시간"
-                  onDecrease={() =>
-                    update("dailyHours", Math.max(0.5, Math.round((input.dailyHours - 0.5) * 2) / 2))
-                  }
-                  onIncrease={() =>
-                    update("dailyHours", Math.min(24, Math.round((input.dailyHours + 0.5) * 2) / 2))
-                  }
-                  disableDecrease={input.dailyHours <= 0.5}
-                  disableIncrease={input.dailyHours >= 24}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* 휴게시간 */}
-          {!input.useDirectHours ? (
+          {/* 간편 모드 휴게시간 */}
+          {mode === "simple" && !input.useDirectHours ? (
             <div className="mt-4">
               <div className="mb-1.5 flex items-center justify-between">
                 <span className="text-xs font-semibold text-ink-2">하루 휴게시간 (무급)</span>
@@ -333,13 +416,23 @@ export default function AlbaReceiptPage() {
             </div>
           ) : null}
 
-          {/* 근무 요약 */}
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-900 px-3.5 py-2.5 text-white">
-            <span className="text-[11px] text-slate-300">주 소정근로 / 월 환산</span>
-            <span className="tnum text-[12px] font-bold">
-              {weeklyHoursLabel}시간 · 월 {result.monthlyHours}시간
-            </span>
-          </div>
+          {/* 간편 모드 요약 */}
+          {mode === "simple" ? (
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-900 px-3.5 py-2.5 text-white">
+              <span className="text-[11px] text-slate-300">주 소정근로 / 월 환산</span>
+              <span className="tnum text-[12px] font-bold">
+                {weeklyHoursLabel}시간 · 월 {result.monthlyHours}시간
+              </span>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-900 px-3.5 py-2.5 text-white">
+              <span className="text-[11px] text-slate-300">달력 기준 근무 / 실수령</span>
+              <span className="tnum text-[12px] font-bold">
+                {calendarResult.workDays}일 · {hoursText(calendarResult.baseHours)}시간 ·{" "}
+                {won(calendarResult.net)}원
+              </span>
+            </div>
+          )}
 
           {/* 세금/공제 */}
           <div className="mt-5">
@@ -392,59 +485,70 @@ export default function AlbaReceiptPage() {
             />
           </div>
 
-          {/* 연장·야간 */}
-          <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/60 px-3.5 py-3">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-bold text-ink-2 [&::-webkit-details-marker]:hidden">
-              <span>
-                연장 · 야간 근무 (선택)
-                {input.overtimeHours > 0 || input.nightHours > 0 ? (
-                  <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.5 text-[9px] font-bold text-white">
-                    반영됨
-                  </span>
-                ) : null}
-              </span>
-              <span aria-hidden="true" className="text-ink-faint">
-                ▾
-              </span>
-            </summary>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div>
-                <span className="mb-1 block text-[11px] text-ink-muted">주 연장근로</span>
-                <NumericInput
-                  value={input.overtimeHours}
-                  onChange={(next) => update("overtimeHours", next)}
-                  suffix="h"
-                  ariaLabel="주 연장근로시간"
-                  placeholder="0"
-                  max={168}
-                  step={0.5}
-                />
+          {/* 간편 모드 연장·야간 */}
+          {mode === "simple" ? (
+            <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/60 px-3.5 py-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-bold text-ink-2 [&::-webkit-details-marker]:hidden">
+                <span>
+                  연장 · 야간 근무 (선택)
+                  {input.overtimeHours > 0 || input.nightHours > 0 ? (
+                    <span className="ml-1.5 rounded-full bg-brand px-1.5 py-0.5 text-[9px] font-bold text-white">
+                      반영됨
+                    </span>
+                  ) : null}
+                </span>
+                <span aria-hidden="true" className="text-ink-faint">
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <span className="mb-1 block text-[11px] text-ink-muted">주 연장근로</span>
+                  <NumericInput
+                    value={input.overtimeHours}
+                    onChange={(next) => update("overtimeHours", next)}
+                    suffix="h"
+                    ariaLabel="주 연장근로시간"
+                    placeholder="0"
+                    max={168}
+                    step={0.5}
+                  />
+                </div>
+                <div>
+                  <span className="mb-1 block text-[11px] text-ink-muted">주 야간근로</span>
+                  <NumericInput
+                    value={input.nightHours}
+                    onChange={(next) => update("nightHours", next)}
+                    suffix="h"
+                    ariaLabel="주 야간근로시간"
+                    placeholder="0"
+                    max={168}
+                    step={0.5}
+                  />
+                </div>
               </div>
-              <div>
-                <span className="mb-1 block text-[11px] text-ink-muted">주 야간근로</span>
-                <NumericInput
-                  value={input.nightHours}
-                  onChange={(next) => update("nightHours", next)}
-                  suffix="h"
-                  ariaLabel="주 야간근로시간"
-                  placeholder="0"
-                  max={168}
-                  step={0.5}
-                />
-              </div>
-            </div>
-            <p className="mt-2 text-[10px] leading-relaxed text-ink-faint">
-              야간은 22:00~06:00 근무 시간이에요. 근무 시간에 포함된 것으로 보고 가산분만 더해요.
-              <br />
-              {input.fiveOrMoreEmployees
-                ? "5인 이상: 연장 50% · 야간 50% 가산(중복 시 100%)."
-                : "5인 미만: 가산 없이 근무시간만큼의 시급을 반영해요."}
+              <p className="mt-2 text-[10px] leading-relaxed text-ink-faint">
+                야간은 22:00~06:00 근무 시간이에요. 근무 시간에 포함된 것으로 보고 가산분만 더해요.
+                <br />
+                {input.fiveOrMoreEmployees
+                  ? "5인 이상: 연장 50% · 야간 50% 가산(중복 시 100%)."
+                  : "5인 미만: 가산 없이 근무시간만큼의 시급을 반영해요."}
+              </p>
+            </details>
+          ) : (
+            <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[10px] leading-relaxed text-ink-faint">
+              연장·야간·결근은 아래 달력에서 날짜를 눌러 넣을 수 있어요.
             </p>
-          </details>
+          )}
         </section>
 
+        {/* 달력 입력 */}
+        {mode === "calendar" ? (
+          <CalendarPanel state={cal} onChange={setCal} result={calendarResult} wage={input.hourlyWage} />
+        ) : null}
+
         {/* 영수증 */}
-        <Receipt input={input} result={result} />
+        <Receipt summary={summary} />
 
         <button
           type="button"
@@ -456,12 +560,7 @@ export default function AlbaReceiptPage() {
         </button>
 
         {/* 실제 입금액 비교 */}
-        <RealPayCheck
-          input={input}
-          result={result}
-          actualText={actualPayText}
-          onActualTextChange={setActualPayText}
-        />
+        <RealPayCheck summary={summary} actualText={actualPayText} onActualTextChange={setActualPayText} />
 
         <PartnerSlot />
 
@@ -472,10 +571,20 @@ export default function AlbaReceiptPage() {
             {[
               ["최저시급", `${won(MIN_WAGE_2026)}원 · 월 209시간 ${won(MIN_WAGE_2026 * 209)}원`],
               ["2027년 최저시급", `${won(MIN_WAGE_2027)}원 · 월 ${won(MIN_WAGE_2027 * 209)}원`],
-              ["주휴수당", "(주 소정근로 ÷ 40) × 8시간 × 시급 · 주 15시간 이상 · 소정근로일 개근 가정"],
+              [
+                "주휴수당",
+                summary.mode === "calendar"
+                  ? "(주 소정근로 ÷ 40) × 8시간 × 시급 · 주 15시간 이상 + 개근한 주만 지급"
+                  : "(주 소정근로 ÷ 40) × 8시간 × 시급 · 주 15시간 이상 · 소정근로일 개근 가정",
+              ],
               ["4대보험 근로자", "국민연금 4.75% + 건강보험 3.595% + 장기요양 13.14% + 고용보험 0.9% = 9.7%"],
               ["3.3% 원천징수", "소득세 3% + 지방소득세 0.3%"],
-              ["월 환산", `1년 365일 ÷ 12개월 ÷ 7일 = ${WEEKS_PER_MONTH.toFixed(3)}주`],
+              [
+                summary.mode === "calendar" ? "달력 계산" : "월 환산",
+                summary.mode === "calendar"
+                  ? "그 달의 실제 근무일·근무시간을 그대로 합산 (주 단위 월~일)"
+                  : `1년 365일 ÷ 12개월 ÷ 7일 = ${WEEKS_PER_MONTH.toFixed(3)}주`,
+              ],
               ["가산수당", "연장·야간 50% (5인 이상 사업장)"],
             ].map(([term, value]) => (
               <div key={term} className="flex gap-3 border-b border-dashed border-slate-100 pb-2 last:border-0 last:pb-0">

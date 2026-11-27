@@ -1,25 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { compareRealPay, won, type PayInput, type PayResult } from "@/lib/pay";
-import { buildCheckMessage } from "@/lib/receipt";
+import { compareRealPay, won } from "@/lib/pay";
+import { buildCheckMessage, type PaySummary } from "@/lib/summary";
 import { copyText } from "@/lib/clipboard";
 
 export function RealPayCheck({
-  input,
-  result,
+  summary,
   actualText,
   onActualTextChange,
 }: {
-  input: PayInput;
-  result: PayResult;
+  summary: PaySummary;
   actualText: string;
   onActualTextChange: (next: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const actual = Number(actualText.replace(/[^0-9]/g, ""));
   const hasActual = actualText.trim() !== "" && actual > 0;
-  const comparison = hasActual ? compareRealPay(result.net, actual) : null;
+  const comparison = hasActual ? compareRealPay(summary.net, actual) : null;
 
   useEffect(() => {
     if (!copied) return;
@@ -28,7 +26,7 @@ export function RealPayCheck({
   }, [copied]);
 
   const handleCopyMessage = async () => {
-    const ok = await copyText(buildCheckMessage(input, result, actual));
+    const ok = await copyText(buildCheckMessage(summary, actual));
     if (ok) setCopied(true);
   };
 
@@ -82,7 +80,7 @@ export function RealPayCheck({
             type="text"
             inputMode="numeric"
             autoComplete="off"
-            placeholder={`예: ${won(result.net)}`}
+            placeholder={`예: ${won(summary.net)}`}
             value={actualText}
             onChange={(event) => {
               const digits = event.target.value.replace(/[^0-9]/g, "").slice(0, 12);
@@ -105,7 +103,7 @@ export function RealPayCheck({
           <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
             <div className="rounded-xl bg-white/70 px-3 py-2">
               <p className="text-ink-faint">예상 실수령액</p>
-              <p className="tnum mt-0.5 text-[13px] font-bold text-ink">{won(result.net)}원</p>
+              <p className="tnum mt-0.5 text-[13px] font-bold text-ink">{won(summary.net)}원</p>
             </div>
             <div className="rounded-xl bg-white/70 px-3 py-2">
               <p className="text-ink-faint">실제 입금액</p>

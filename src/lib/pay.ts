@@ -70,6 +70,8 @@ export interface DeductionLine {
 }
 
 export interface PayResult {
+  /** 계산 모드 — 간편 평균(4.345주) */
+  mode: "simple";
   effectiveWage: number;
   probationApplied: boolean;
   /** 하루 실근로시간(휴게 제외) */
@@ -158,8 +160,45 @@ export function calcPay(input: PayInput): PayResult {
 
   const gross = monthlyBase + monthlyOvertime + monthlyNight + monthlyHoliday;
 
+  const { deductions, totalDeduction } = calcDeductions(gross, input.taxType);
+  const net = gross - totalDeduction;
+  const totalMonthlyHours = monthlyHours + monthlyOvertimeHours + monthlyNightHours;
+  const hourlyNet = totalMonthlyHours > 0 ? net / totalMonthlyHours : 0;
+
+  return {
+    mode: "simple",
+    effectiveWage,
+    probationApplied,
+    dailyRealHours,
+    weeklyHours,
+    monthlyBaseHours,
+    monthlyHolidayHours,
+    monthlyOvertimeHours,
+    monthlyNightHours,
+    monthlyHours,
+    holidayEligible,
+    weeklyHolidayHours,
+    monthlyBase,
+    monthlyOvertime,
+    monthlyNight,
+    monthlyHoliday,
+    gross,
+    deductions,
+    totalDeduction,
+    net,
+    hourlyNet,
+    overtimeMultiplier,
+    nightPremiumMultiplier,
+  };
+}
+
+/** 세전 급여에서 세금·4대보험 근로자 부담분을 계산한다. */
+export function calcDeductions(
+  gross: number,
+  taxType: TaxType,
+): { deductions: DeductionLine[]; totalDeduction: number } {
   const deductions: DeductionLine[] = [];
-  if (input.taxType === "freelancer") {
+  if (taxType === "freelancer") {
     deductions.push({
       key: "incomeTax",
       label: "소득세 (3%)",
@@ -172,7 +211,7 @@ export function calcPay(input: PayInput): PayResult {
       rate: FREELANCER_LOCAL_TAX_RATE,
       amount: roundWon(gross * FREELANCER_LOCAL_TAX_RATE),
     });
-  } else if (input.taxType === "insurance") {
+  } else if (taxType === "insurance") {
     deductions.push({
       key: "pension",
       label: "국민연금 (4.75%)",
@@ -200,34 +239,7 @@ export function calcPay(input: PayInput): PayResult {
   }
 
   const totalDeduction = deductions.reduce((sum, line) => sum + line.amount, 0);
-  const net = gross - totalDeduction;
-  const totalMonthlyHours = monthlyHours + monthlyOvertimeHours + monthlyNightHours;
-  const hourlyNet = totalMonthlyHours > 0 ? net / totalMonthlyHours : 0;
-
-  return {
-    effectiveWage,
-    probationApplied,
-    dailyRealHours,
-    weeklyHours,
-    monthlyBaseHours,
-    monthlyHolidayHours,
-    monthlyOvertimeHours,
-    monthlyNightHours,
-    monthlyHours,
-    holidayEligible,
-    weeklyHolidayHours,
-    monthlyBase,
-    monthlyOvertime,
-    monthlyNight,
-    monthlyHoliday,
-    gross,
-    deductions,
-    totalDeduction,
-    net,
-    hourlyNet,
-    overtimeMultiplier,
-    nightPremiumMultiplier,
-  };
+  return { deductions, totalDeduction };
 }
 
 export type RealPayStatus = "short" | "exact" | "over";
