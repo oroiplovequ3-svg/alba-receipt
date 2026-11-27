@@ -91,6 +91,37 @@ export function ToggleRow({
   );
 }
 
+export function WonInput({
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+}: {
+  value: number;
+  onChange: (next: number) => void;
+  ariaLabel: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        value={value > 0 ? value.toLocaleString("ko-KR") : ""}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        onChange={(event) => {
+          const digits = event.target.value.replace(/[^0-9]/g, "").slice(0, 9);
+          onChange(digits ? Number(digits) : 0);
+        }}
+        className="tnum w-full rounded-xl border border-slate-300 bg-slate-50 py-3 pl-4 pr-10 text-right text-lg font-bold text-ink placeholder:text-base placeholder:font-normal placeholder:text-ink-faint focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand/25"
+      />
+      <span className="pointer-events-none absolute right-3.5 top-3.5 text-sm text-ink-muted">원</span>
+    </div>
+  );
+}
+
 export function NumericInput({
   value,
   onChange,
@@ -99,7 +130,6 @@ export function NumericInput({
   ariaLabel,
   max,
   step = 1,
-  large,
 }: {
   value: number;
   onChange: (next: number) => void;
@@ -108,7 +138,6 @@ export function NumericInput({
   ariaLabel: string;
   max?: number;
   step?: number;
-  large?: boolean;
 }) {
   return (
     <div className="relative">
@@ -131,16 +160,10 @@ export function NumericInput({
           if (Number.isNaN(parsed)) return;
           onChange(Math.max(0, max ? Math.min(parsed, max) : parsed));
         }}
-        className={`tnum w-full rounded-xl border border-slate-300 bg-slate-50 px-4 text-right font-bold text-ink placeholder:font-normal placeholder:text-ink-faint focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand/25 ${
-          large ? "py-3 pr-10 text-lg" : "py-2.5 pr-9 text-sm"
-        }`}
+        className="tnum w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-4 pr-9 text-right text-sm font-bold text-ink placeholder:font-normal placeholder:text-ink-faint focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand/25"
       />
       {suffix ? (
-        <span
-          className={`pointer-events-none absolute right-3.5 text-ink-muted ${
-            large ? "top-3.5 text-sm" : "top-2.5 text-xs"
-          }`}
-        >
+        <span className="pointer-events-none absolute right-3.5 top-2.5 text-xs text-ink-muted">
           {suffix}
         </span>
       ) : null}

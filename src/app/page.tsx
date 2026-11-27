@@ -5,7 +5,7 @@ import { Receipt } from "@/components/Receipt";
 import { RealPayCheck } from "@/components/RealPayCheck";
 import { Faq } from "@/components/Faq";
 import { PartnerSlot } from "@/components/PartnerSlot";
-import { NumericInput, Stepper, ToggleRow } from "@/components/ui";
+import { NumericInput, Stepper, ToggleRow, WonInput } from "@/components/ui";
 import {
   calcPay,
   calcWeeklyHours,
@@ -186,13 +186,11 @@ export default function AlbaReceiptPage() {
               </div>
             </div>
 
-            <NumericInput
+            <WonInput
               value={input.hourlyWage}
               onChange={(next) => update("hourlyWage", next)}
-              suffix="원"
               ariaLabel="시급"
               placeholder={won(MIN_WAGE_2026)}
-              large
             />
 
             {belowMinimum ? (
@@ -299,7 +297,7 @@ export default function AlbaReceiptPage() {
                     max={600}
                     step={10}
                     aria-label="휴게시간 직접 입력(분)"
-                    placeholder="직접"
+                    placeholder="0"
                     value={
                       BREAK_PRESETS.includes(input.breakMinutes) || input.breakMinutes === 0
                         ? ""
