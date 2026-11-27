@@ -429,7 +429,7 @@ export function CalendarPanel({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="mb-1 block text-[10px] font-semibold text-ink-muted">
-                    연장 ({selectedDay.overtimeHours > 0 ? "" : "선택"}1.5배)
+                    연장 (가산 50%)
                   </span>
                   <NumericInput
                     value={selectedDay.overtimeHours}
