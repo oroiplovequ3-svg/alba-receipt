@@ -12,6 +12,11 @@ import {
   type DayOverride,
 } from "../src/lib/calendar.ts";
 import { MIN_WAGE_2026 } from "../src/lib/pay.ts";
+import {
+  buildCheckMessage,
+  buildReceiptText,
+  calendarSummary,
+} from "../src/lib/summary.ts";
 
 const rules = (hours: Record<number, number>): CalendarInput["rules"] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
@@ -219,4 +224,38 @@ test("월 이동과 저장 상태 변환", () => {
   const broken = sanitizeCalendarState({ year: 100, month: 99, rules: "x", months: [] });
   assert.equal(broken.month >= 1 && broken.month <= 12, true);
   assert.equal(broken.rules.length, 7);
+});
+
+test("달력 결과가 영수증·확인 메시지 문구에 그대로 반영된다", () => {
+  const input = nov({
+    overrides: {
+      "2026-11-10": { status: "off" },
+      "2026-11-07": { status: "work", hours: 4, overtimeHours: 2, nightHours: 2 },
+    },
+  });
+  const result = calcCalendarPay(input, {
+    hourlyWage: MIN_WAGE_2026,
+    probation: false,
+    fiveOrMoreEmployees: true,
+    taxType: "freelancer",
+  });
+  const summary = calendarSummary(input, result);
+
+  assert.equal(summary.mode, "calendar");
+  assert.equal(summary.periodLabel, "2026년 11월 달력");
+  assert.equal(summary.workDays, result.workDays);
+  assert.equal(summary.net, result.net);
+
+  const text = buildReceiptText(summary, result.net);
+  assert.ok(text.includes("2026년 11월 달력"));
+  assert.ok(text.includes("기본급"));
+  assert.ok(text.includes("주휴수당"));
+  assert.ok(text.includes("연장수당"));
+  assert.ok(text.includes("야간가산"));
+  assert.ok(text.includes("예상 실수령액"));
+  assert.ok(!text.includes("4.345주"));
+
+  const message = buildCheckMessage(summary, result.net - 50_000);
+  assert.ok(message.includes("2026년 11월 달력"));
+  assert.ok(message.includes("50,000원 적습니다"));
 });
